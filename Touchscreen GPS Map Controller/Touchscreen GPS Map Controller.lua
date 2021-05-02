@@ -3,7 +3,7 @@
 -- Touchscreen UI code
 
 --------------------------------------------------------------------------------
--- Composite Inputs
+-- Composite inputs
 
 -- Boolean
 -- [1-2] - Touch input data
@@ -24,7 +24,13 @@ Button.__index = Button
 -- Button:updatePressedState
 -- Updates the "pressed" state of the button
 
-function Button:updatePressedState( inputX, inputY )
+function Button:updatePressedState( isPressed, inputX, inputY )
+
+   -- If the screen isn't being touched then nothing is being pressed
+   if not isPressed then
+      self.pressed = false
+      return
+   end
 
    -- Check if the input coordinates are within the button's bounding box
    if inputX > self.x
@@ -33,6 +39,7 @@ function Button:updatePressedState( inputX, inputY )
       and inputY < self.y + self.height
    then
       self.pressed = true
+      self.callbackFunc()
    else
       self.pressed = false
    end
@@ -44,17 +51,26 @@ end
 -- Draws the button object to the screen
 
 function Button:draw()
-
-   -- Draw button background
    if self.pressed then
-      screen.drawRectF( self.x, self.y, self.width, self.height )
-   else
+
+      -- Draw background
       screen.drawRect( self.x, self.y, self.width, self.height )
+      screen.drawRectF( self.x, self.y, self.width, self.height )
+
+      -- Draw text
+      screen.setColor( 0, 0, 0 )
+      screen.drawTextBox( self.x + 1, self.y + 1, self.width, self.height, self.text, 0, 0 )
+      screen.setColor( 255, 255, 255 )
+
+   else
+
+      -- Draw background
+      screen.drawRect( self.x, self.y, self.width, self.height )
+
+      -- Draw text
+      screen.drawTextBox( self.x + 1, self.y + 1, self.width, self.height, self.text, 0, 0 )
+
    end
-
-   -- Draw button text
-   screen.drawTextBox( self.x, self.y, self.width, self.height, self.text, 0, 0 )
-
 end
 
 ----------------------------------------
@@ -73,6 +89,7 @@ function Button:new( x, y, width, height, text, callbackFunc )
    newButton.height = height
    newButton.text = text
    newButton.pressed = false
+   newButton.callbackFunc = callbackFunc
 
    -- Set class functions appropriately (No 'setmetatable' in Stormworks yet... :c)
    newButton.updatePressedState = Button.updatePressedState
@@ -84,34 +101,32 @@ function Button:new( x, y, width, height, text, callbackFunc )
 end
 
 --------------------------------------------------------------------------------
--- drawRotatedTriangle
--- Draws a triangle to the screen at the provided coordinates and angle
+-- drawShipIndicator
+-- Draws an indicator to the screen at the provided coordinates with an angle indicator
 
-function drawRotatedTriangle( centerX, centerY, size, angle )
+function drawShipIndicator( centerX, centerY, angle )
 
-   -- Calculate pre-rotation coordinates
-   local x1 = centerX;
-   local y1 = centerY - size / 2
-   local x2 = centerX + size / 2
-   local y2 = centerY + size / 2
-   local x3 = centerX - size / 2
-   local y3 = y2
-
-   -- Convert angle to radians
+   -- Convert provided angle to radians
    angle = math.rad( angle )
 
-   -- Calculate rotated coordinates
-   local x1r = ( x1 - centerX ) * math.cos( angle ) - ( y1 - centerY ) * math.sin( angle ) + centerX
-   local y1r = ( x1 - centerX ) * math.sin( angle ) + ( y1 - centerY ) * math.cos( angle ) + centerY
+   -- Calculate angle vector for angle indicator
+   local c = math.cos( angle )
+   local s = math.sin( angle )
+   local vecX = ( c * 0 ) - ( s * -2 )
+   local vecY = ( s * 0 ) + ( c * -2 )
 
-   local x2r = ( x2 - centerX ) * math.cos( angle ) - ( y2 - centerY ) * math.sin( angle ) + centerX
-   local y2r = ( x2 - centerX ) * math.sin( angle ) + ( y2 - centerY ) * math.cos( angle ) + centerY
+   -- Calculate angle indicator screen position
+   local indicatorX = centerX + vecX
+   local indicatorY = centerY + vecY
 
-   local x3r = ( x3 - centerX ) * math.cos( angle ) - ( y3 - centerY ) * math.sin( angle ) + centerX
-   local y3r = ( x3 - centerX ) * math.sin( angle ) + ( y3 - centerY ) * math.cos( angle ) + centerY
+   -- Draw ship indicator to the provided coordinates
+   screen.setColor( 255, 255, 255 )
+   screen.drawCircleF( centerX, centerY, 1 )
 
-   -- Draw triangle
-   screen.drawTriangle( x1r, y1r, x2r, y2r, x3r, y3r )
+   -- Draw angle indicator around the ship indicator
+   screen.setColor( 255, 0, 0 )
+   screen.drawCircleF( indicatorX, indicatorY, 1 )
+   screen.setColor( 255, 255, 255 )
 
 end
 
@@ -119,7 +134,7 @@ end
 -- Global data
 
 -- Persistent map state data
-mapZoom = 4
+mapZoom = 2
 
 -- Persistent GPS data
 gpsX = 0
@@ -142,51 +157,16 @@ function onTick()
    -- Get GPS data from composite input
    gpsX = input.getNumber( 7 )
    gpsY = input.getNumber( 8 )
-   gpsAngle = input.getNumber( 9 )
+   gpsAngle = ( ( 1 - input.getNumber( 9 ) ) % 1 ) * 360
 
    -- Get input values, if any
    local isPressed = input.getBool( 1 )
    local inputX = input.getNumber( 3 )
    local inputY = input.getNumber( 4 )
 
-   -- Handle presses
-   if isPressed then
-
-      -- Update button press states
-      for _, button in pairs(ui.buttons) do
-         button:updatePressedState( inputX, inputY )
-      end
-
-   end
-
-   -- Check button press states and trigger actions
-   if ui.initialized then
-
-      -- Trigger zoom in button function on press
-      if ui.buttons.zoomInButton.pressed then
-         if mapZoom > 0.1 then
-            mapZoom = mapZoom - 0.1
-         else
-            mapZoom = 0.1
-         end
-      end
-
-      -- Trigger zoom out button function on press
-      if ui.buttons.zoomOutButton.pressed then
-         if mapZoom < 50 then
-            mapZoom = mapZoom + 0.1
-         else
-            mapZoom = 50
-         end
-      end
-
-   end
-
-   -- Clear all press states if no pressing is happening
-   if not isPressed then
-      for _, button in pairs(ui.buttons) do
-         button.pressed = false
-      end
+   -- Update button press states
+   for _, button in pairs( ui.buttons ) do
+      button:updatePressedState( isPressed, inputX, inputY )
    end
 
 end
@@ -203,6 +183,19 @@ function onDraw()
    centerX = screenWidth / 2
    centerY = screenHeight / 2
 
+   -- Initialize UI objects if necessary
+   if not ui.initialized then
+      ui.buttons.zoomInButton = Button:new(
+         screenWidth - 20, 2, 7, 7, '+',
+         function() mapZoom = math.min( math.max( mapZoom - 0.075, 0.5 ), 10 ) end
+      )
+      ui.buttons.zoomOutButton = Button:new(
+         screenWidth - 10, 2, 7, 7, '-',
+         function() mapZoom = math.min( math.max( mapZoom + 0.075, 0.5 ), 10 ) end
+      )
+      ui.initialized = true
+   end
+
    -- Map colors: land
    screen.setMapColorLand( 0, 255, 0 )
    screen.setMapColorGrass( 0, 255, 0 )
@@ -210,27 +203,18 @@ function onDraw()
    screen.setMapColorSnow( 0, 255, 0 )
 
    -- Map colors: water
-   screen.setMapColorShallows( 0, 0, 255 )
+   screen.setMapColorShallows( 0, 0, 0 )
    screen.setMapColorOcean( 0, 0, 0 )
 
    -- Draw map
    screen.drawMap( gpsX, gpsY, mapZoom )
 
    -- Draw ship indicator
-   drawRotatedTriangle( centerX, centerY, 4, gpsAngle )
-
-   -- Initialize UI objects
-   if not ui.initialized then
-      ui.buttons.zoomInButton = Button:new( screenWidth - 14, screenHeight - 8, 6, 6, '+')
-      ui.buttons.zoomOutButton = Button:new( screenWidth - 8, screenHeight - 8, 6, 6, '-')
-      ui.initialized = true
-   end
+   drawShipIndicator( centerX, centerY, gpsAngle )
 
    -- Draw buttons
-   if ui.initialized then
-      for _, button in pairs(ui.buttons) do
-         button:draw()
-      end
+   for _, button in pairs( ui.buttons ) do
+      button:draw()
    end
 
 end
